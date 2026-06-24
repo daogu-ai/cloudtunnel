@@ -1,0 +1,48 @@
+#!/bin/bash
+# 编译并打包成可双击运行的 CloudTunnel.app（纯菜单栏，无 Dock 图标）。
+set -euo pipefail
+cd "$(dirname "$0")"
+
+APP="CloudTunnel.app"
+BIN_NAME="CloudTunnel"
+
+echo "==> swift build -c release"
+swift build -c release
+
+BIN_PATH="$(swift build -c release --show-bin-path)/$BIN_NAME"
+
+echo "==> 组装 $APP"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN_PATH" "$APP/Contents/MacOS/$BIN_NAME"
+
+cat > "$APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>            <string>CloudTunnel</string>
+    <key>CFBundleDisplayName</key>     <string>CloudTunnel</string>
+    <key>CFBundleIdentifier</key>      <string>com.wuji.cloudtunnel</string>
+    <key>CFBundleVersion</key>         <string>1.0</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundlePackageType</key>     <string>APPL</string>
+    <key>CFBundleExecutable</key>      <string>CloudTunnel</string>
+    <key>LSMinimumSystemVersion</key>  <string>13.0</string>
+    <key>LSUIElement</key>            <true/>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>zh-Hans</string>
+    </array>
+    <key>CFBundleAllowMixedLocalizations</key><true/>
+</dict>
+</plist>
+PLIST
+
+# 本地自签，避免 Gatekeeper 直接拦下（ad-hoc 签名）。
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+
+echo "==> 完成: $(pwd)/$APP"
+echo "    运行: open $APP   （图标出现在右上角菜单栏）"

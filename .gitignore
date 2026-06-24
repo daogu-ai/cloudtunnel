@@ -1,0 +1,16 @@
+# Build artifacts
+/.build/
+/dist/
+*.zip
+
+# Bundled app (produced by build-app.sh)
+/CloudTunnel.app/
+
+# Session-local memory (not part of the project)
+/.remember/
+
+# macOS
+.DS_Store
+
+# SwiftPM
+Package.resolved
