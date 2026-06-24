@@ -41,8 +41,17 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# 本地自签，避免 Gatekeeper 直接拦下（ad-hoc 签名）。
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+# 签名：设了 CODESIGN_IDENTITY 用 Developer ID + hardened runtime（可公证）；
+# 否则 ad-hoc 自签（仅本机可用，分发需用户解除隔离）。
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+  echo "==> Developer ID 签名: $CODESIGN_IDENTITY"
+  codesign --force --deep --options runtime --timestamp \
+    --sign "$CODESIGN_IDENTITY" "$APP"
+  codesign --verify --strict --verbose=2 "$APP" || true
+else
+  echo "==> ad-hoc 签名（未公证；分发时用户需解除隔离）"
+  codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+fi
 
 echo "==> 完成: $(pwd)/$APP"
 echo "    运行: open $APP   （图标出现在右上角菜单栏）"
