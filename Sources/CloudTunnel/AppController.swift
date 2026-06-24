@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editWindow: NSWindow?
     private var serverWindow: NSWindow?
 
+    /// 每条隧道主行的菜单项，用于状态变化时就地刷新状态点（菜单打开期间也实时更新）。
+    private var tunnelItems: [UUID: NSMenuItem] = [:]
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu.autoenablesItems = false
@@ -28,8 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 状态变化
 
-    /// 状态变化时刷新菜单栏图标（菜单每次打开会经 menuNeedsUpdate 重建，状态自然刷新）。
-    private func handleChange() { updateIcon() }
+    /// 状态变化时：刷新菜单栏图标，并就地更新各隧道行的状态点（菜单打开时也实时生效）。
+    private func handleChange() {
+        updateIcon()
+        for (id, item) in tunnelItems {
+            let title = rowTitle(id)
+            if item.title != title { item.title = title }
+        }
+    }
 
     private func updateIcon() {
         guard let button = statusItem.button else { return }
@@ -52,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
+        tunnelItems.removeAll()
 
         let label = serverStore.servers.isEmpty ? "CloudTunnel"
             : "CloudTunnel · " + serverStore.servers.map { $0.displayName }.joined(separator: ", ")
@@ -103,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let item = NSMenuItem(title: rowTitle(cfg.id), action: nil, keyEquivalent: "")
             item.submenu = managementMenu(for: cfg.id)
             menu.addItem(item)
+            tunnelItems[cfg.id] = item
         }
     }
 
