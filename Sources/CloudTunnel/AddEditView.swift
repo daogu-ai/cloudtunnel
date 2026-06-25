@@ -88,18 +88,25 @@ struct AddEditView: View {
                 }
             }
 
-            // 端口
-            section(samePort ? L("端口", "Port") : L("端口（本地 / 远程）", "Port (local / remote)")) {
-                HStack(spacing: 8) {
-                    TextField(samePort ? L("如 11812", "e.g. 11812") : L("本地", "local"), text: $localPortText)
-                        .frame(width: 110)
-                    if !samePort {
-                        Text("→")
-                        TextField(L("远程", "remote"), text: $remotePortText).frame(width: 110)
+            // 端口（本地 → 远程，始终都显示；默认远程跟随本地）
+            section(L("端口", "Ports")) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L("本地", "Local")).font(.caption).foregroundStyle(.secondary)
+                        TextField(L("如 5100", "e.g. 5100"), text: $localPortText).frame(width: 110)
+                    }
+                    Text("→").padding(.bottom, 5).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L("远程", "Remote")).font(.caption).foregroundStyle(.secondary)
+                        TextField(L("如 5200", "e.g. 5200"),
+                                  text: samePort ? .constant(localPortText) : $remotePortText)
+                            .frame(width: 110)
+                            .disabled(samePort)
                     }
                 }
                 .textFieldStyle(.roundedBorder)
-                Toggle(L("本地口与远程口相同", "Same local & remote port"), isOn: $samePort).toggleStyle(.checkbox).font(.callout)
+                Toggle(L("远程端口与本地相同（默认）", "Remote port same as local (default)"), isOn: $samePort)
+                    .toggleStyle(.checkbox).font(.callout)
             }
 
             // 名称 + 备注
