@@ -48,8 +48,13 @@ final class StayOpenItemView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         action()
-        title = titleProvider()   // 刷新 启动 <-> 停止 文案
-        needsDisplay = true
+        refresh()
         // 不调用 cancelTracking —— 菜单保持打开，可继续切换其它隧道
+    }
+
+    /// 外部状态变化时刷新文案（启动 <-> 停止），菜单打开期间也实时生效。
+    func refresh() {
+        let t = titleProvider()
+        if t != title { title = t; needsDisplay = true }
     }
 }

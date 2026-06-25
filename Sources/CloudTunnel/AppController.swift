@@ -10,8 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var editWindow: NSWindow?
     private var serverWindow: NSWindow?
 
-    /// 每条隧道主行的菜单项，用于状态变化时就地刷新状态点（菜单打开期间也实时更新）。
-    private var tunnelItems: [UUID: NSMenuItem] = [:]
+    /// 每条隧道在当前菜单里的各项引用，用于状态变化时就地刷新（菜单打开期间也实时生效）。
+    private final class MenuRefs {
+        var row: NSMenuItem?
+        var toggleView: StayOpenItemView?
+        var edit: NSMenuItem?
+        var del: NSMenuItem?
+    }
+    private var menuRefs: [UUID: MenuRefs] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()   // 让编辑窗口里的 Cmd+C/V/X/A/Z 生效
@@ -59,13 +65,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     // MARK: - 状态变化
 
-    /// 状态变化时：刷新菜单栏图标，并就地更新各隧道行的状态点（菜单打开时也实时生效）。
+    /// 状态变化时：刷新菜单栏图标，并就地更新每条隧道的状态点、开关文案、编辑/删除可用状态。
+    /// 菜单打开期间也实时生效，无需重开菜单。
     private func handleChange() {
         updateIcon()
-        for (id, item) in tunnelItems {
-            let title = rowTitle(id)
-            if item.title != title { item.title = title }
+        for (id, refs) in menuRefs {
+            let on = manager.isOn(id)
+            if let row = refs.row { let t = rowTitle(id); if row.title != t { row.title = t } }
+            refs.toggleView?.refresh()
+            if let edit = refs.edit { edit.isEnabled = !on; edit.title = editTitle(on: on) }
+            if let del = refs.del  { del.isEnabled = !on;  del.title = delTitle(on: on) }
         }
+    }
+
+    private func editTitle(on: Bool) -> String {
+        on ? L("✎  编辑…（先停止）", "✎  Edit…  (stop first)") : L("✎  编辑…", "✎  Edit…")
+    }
+    private func delTitle(on: Bool) -> String {
+        on ? L("🗑  删除（先停止）", "🗑  Delete  (stop first)") : L("🗑  删除", "🗑  Delete")
     }
 
     private func updateIcon() {
@@ -89,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
-        tunnelItems.removeAll()
+        menuRefs.removeAll()
 
         let label = serverStore.servers.isEmpty ? "CloudTunnel"
             : "CloudTunnel · " + serverStore.servers.map { $0.displayName }.joined(separator: ", ")
@@ -138,10 +155,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         // 每条隧道 = 带原生 ▸ 的标准项；点开子菜单，第一项即启动/停止。
         for cfg in items {
+            let refs = MenuRefs()
+            menuRefs[cfg.id] = refs
             let item = NSMenuItem(title: rowTitle(cfg.id), action: nil, keyEquivalent: "")
-            item.submenu = managementMenu(for: cfg.id)
+            item.submenu = managementMenu(for: cfg.id)   // 会填充 refs.toggleView/edit/del
             menu.addItem(item)
-            tunnelItems[cfg.id] = item
+            refs.row = item
         }
     }
 
@@ -164,8 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         sub.addItem(.separator())
 
         // 运行中禁止编辑/删除，必须先停止。
-        let edit = NSMenuItem(title: on ? L("✎  编辑…（先停止）", "✎  Edit…  (stop first)") : L("✎  编辑…", "✎  Edit…"),
-                              action: #selector(editTunnel(_:)), keyEquivalent: "")
+        let edit = NSMenuItem(title: editTitle(on: on), action: #selector(editTunnel(_:)), keyEquivalent: "")
         edit.target = self; edit.representedObject = id.uuidString
         edit.isEnabled = !on
         sub.addItem(edit)
@@ -174,11 +192,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         copy.target = self; copy.representedObject = id.uuidString
         sub.addItem(copy)
 
-        let del = NSMenuItem(title: on ? L("🗑  删除（先停止）", "🗑  Delete  (stop first)") : L("🗑  删除", "🗑  Delete"),
-                             action: #selector(deleteTunnel(_:)), keyEquivalent: "")
+        let del = NSMenuItem(title: delTitle(on: on), action: #selector(deleteTunnel(_:)), keyEquivalent: "")
         del.target = self; del.representedObject = id.uuidString
         del.isEnabled = !on
         sub.addItem(del)
+
+        menuRefs[id]?.edit = edit
+        menuRefs[id]?.del = del
 
         // 量算宽度，让常驻开关项与其它项一样宽（点哪都生效）。
         var maxW: CGFloat = 150
@@ -199,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         toggleItem.view = toggleView
         sub.insertItem(.separator(), at: 0)
         sub.insertItem(toggleItem, at: 0)
+        menuRefs[id]?.toggleView = toggleView
 
         return sub
     }
