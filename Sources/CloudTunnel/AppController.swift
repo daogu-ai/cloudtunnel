@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import ServiceManagement
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let serverStore = ServerStore()
     private lazy var manager = TunnelManager(servers: serverStore)
     private var statusItem: NSStatusItem!
@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var tunnelItems: [UUID: NSMenuItem] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMainMenu()   // 让编辑窗口里的 Cmd+C/V/X/A/Z 生效
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu.autoenablesItems = false
         menu.delegate = self
@@ -27,6 +28,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         manager.stopAll()
+    }
+
+    /// 菜单栏(.accessory)应用默认没有主菜单，导致输入框里 Cmd+C/V 等失效。
+    /// 这里建一个标准"编辑"菜单，标准动作走响应链到当前聚焦的文本框。
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: L("退出 CloudTunnel", "Quit CloudTunnel"),
+                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: L("编辑", "Edit"))
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: L("撤销", "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: L("重做", "Redo"), action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: L("剪切", "Cut"), action: Selector(("cut:")), keyEquivalent: "x")
+        editMenu.addItem(withTitle: L("拷贝", "Copy"), action: Selector(("copy:")), keyEquivalent: "c")
+        editMenu.addItem(withTitle: L("粘贴", "Paste"), action: Selector(("paste:")), keyEquivalent: "v")
+        editMenu.addItem(withTitle: L("全选", "Select All"), action: Selector(("selectAll:")), keyEquivalent: "a")
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - 状态变化
@@ -79,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addAction(L("⏻ 全部停止", "⏻ Stop All"), #selector(stopAllAction), to: menu)
 
         menu.addItem(.separator())
-        let login = NSMenuItem(title: L("开机自启", "Launch at Login"), action: #selector(toggleLoginItem), keyEquivalent: "")
+        let login = NSMenuItem(title: L("登录时启动 CloudTunnel", "Launch CloudTunnel at Login"), action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
         login.state = loginItemEnabled ? .on : .off
         menu.addItem(login)
@@ -221,6 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 编辑窗口
 
     private func showEditor(existing: TunnelConfig?) {
+        closeEditor()   // 全局只留一个编辑窗口，避免叠出多个
         let view = AddEditView(
             existing: existing,
             serverStore: serverStore,
@@ -242,6 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.title = existing == nil ? L("新建隧道", "New Tunnel") : L("编辑隧道", "Edit Tunnel")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.center()
         editWindow = window
 
@@ -250,8 +280,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func closeEditor() {
+        editWindow?.delegate = nil
         editWindow?.close()
         editWindow = nil
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        guard let w = notification.object as? NSWindow else { return }
+        if w == editWindow { editWindow = nil }
+        if w == serverWindow { serverWindow = nil }
+    }
+
+    /// 点到别处 / 打开主菜单导致编辑窗口失去焦点 → 关闭它，避免遗留多个窗口。
+    func windowDidResignKey(_ notification: Notification) {
+        guard let w = notification.object as? NSWindow, w == editWindow else { return }
+        w.close()
     }
 
     // MARK: - 服务器管理窗口
@@ -270,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.title = L("服务器管理", "Servers")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.center()
         serverWindow = window
         NSApp.activate(ignoringOtherApps: true)

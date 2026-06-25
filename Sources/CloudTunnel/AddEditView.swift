@@ -110,7 +110,7 @@ struct AddEditView: View {
                 TextField(L("如：访问云上 Postgres", "e.g. access cloud Postgres"), text: $note).textFieldStyle(.roundedBorder)
             }
 
-            Toggle(L("App 启动时自动开启", "Auto-start when app launches"), isOn: $autoStart).toggleStyle(.checkbox).font(.callout)
+            Toggle(L("此隧道随 App 启动自动连接", "Auto-connect this tunnel on app launch"), isOn: $autoStart).toggleStyle(.checkbox).font(.callout)
 
             // 命令预览
             section(L("预览", "Preview")) {
