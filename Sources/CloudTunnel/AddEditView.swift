@@ -47,6 +47,15 @@ struct AddEditView: View {
         serverID != nil && localPort > 0 && localPort < 65536 && remotePort > 0 && remotePort < 65536
     }
 
+    /// 端口格式/范围校验提示（未开始填则不报错）。
+    private func portInRange(_ t: String) -> Bool { if let p = Int(t) { return p >= 1 && p <= 65535 }; return false }
+    private var portError: String? {
+        if localPortText.isEmpty && remotePortText.isEmpty { return nil }
+        if !portInRange(localPortText) { return L("本地端口需为 1–65535 的数字", "Local port must be a number 1–65535") }
+        if !portInRange(remotePortText) { return L("远程端口需为 1–65535 的数字", "Remote port must be a number 1–65535") }
+        return nil
+    }
+
     private var previewConfig: TunnelConfig {
         TunnelConfig(id: existing?.id ?? UUID(),
                      name: name.isEmpty ? defaultName : name,
@@ -88,25 +97,34 @@ struct AddEditView: View {
                 }
             }
 
-            // 端口（本地 → 远程，始终都显示；默认远程跟随本地）
+            // 端口（本地 → 远程，两框样式一致；默认远程自动跟随本地）
             section(L("端口", "Ports")) {
                 HStack(alignment: .bottom, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L("本地", "Local")).font(.caption).foregroundStyle(.secondary)
                         TextField(L("如 5100", "e.g. 5100"), text: $localPortText).frame(width: 110)
+                            .onChange(of: localPortText) { v in
+                                let d = String(v.filter { $0.isNumber }.prefix(5))
+                                if d != localPortText { localPortText = d }
+                                if samePort { remotePortText = d }
+                            }
                     }
                     Text("→").padding(.bottom, 5).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L("远程", "Remote")).font(.caption).foregroundStyle(.secondary)
-                        TextField(L("如 5200", "e.g. 5200"),
-                                  text: samePort ? .constant(localPortText) : $remotePortText)
-                            .frame(width: 110)
-                            .disabled(samePort)
+                        TextField(L("如 5200", "e.g. 5200"), text: $remotePortText).frame(width: 110)
+                            .onChange(of: remotePortText) { v in
+                                let d = String(v.filter { $0.isNumber }.prefix(5))
+                                if d != remotePortText { remotePortText = d }
+                                if samePort && d != localPortText { samePort = false }   // 手动改远程→解除"相同"
+                            }
                     }
                 }
                 .textFieldStyle(.roundedBorder)
+                if let msg = portError { Text(msg).font(.caption).foregroundStyle(.red) }
                 Toggle(L("远程端口与本地相同（默认）", "Remote port same as local (default)"), isOn: $samePort)
                     .toggleStyle(.checkbox).font(.callout)
+                    .onChange(of: samePort) { on in if on { remotePortText = localPortText } }
             }
 
             // 名称 + 备注

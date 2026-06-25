@@ -100,10 +100,23 @@ struct ServerEditView: View {
                           ? (Keychain.password(for: existing!.id) ?? "") : "")
     }
 
-    private var port: Int { Int(portText) ?? 22 }
-    private var isValid: Bool {
-        !host.trimmingCharacters(in: .whitespaces).isEmpty && port > 0 && port < 65536
-            && (!usePassword || !password.isEmpty)
+    private var port: Int { Int(portText) ?? 0 }
+    private var hostTrimmed: String { host.trimmingCharacters(in: .whitespaces) }
+    /// 主机：SSH 别名 / 主机名 / IP，只允许字母数字与 . _ - :（不允许空格、中文等）。
+    private var hostValid: Bool {
+        !hostTrimmed.isEmpty && hostTrimmed.range(of: "^[A-Za-z0-9._:-]+$", options: .regularExpression) != nil
+    }
+    private var portValid: Bool { if let p = Int(portText) { return p >= 1 && p <= 65535 }; return false }
+    private var isValid: Bool { hostValid && portValid && (!usePassword || !password.isEmpty) }
+
+    private var hostError: String? {
+        if host.isEmpty { return nil }
+        return hostValid ? nil : L("主机只能含字母、数字和 . _ - :（不能有空格/中文）",
+                                   "Host may only contain letters, digits and . _ - : (no spaces/CJK)")
+    }
+    private var portError: String? {
+        if portText.isEmpty { return nil }
+        return portValid ? nil : L("端口需为 1–65535 的数字", "Port must be a number 1–65535")
     }
 
     var body: some View {
@@ -119,8 +132,13 @@ struct ServerEditView: View {
                 }
                 field(L("端口", "Port")) {
                     TextField("22", text: $portText).frame(width: 70)
+                        .onChange(of: portText) { v in
+                            let d = String(v.filter { $0.isNumber }.prefix(5))
+                            if d != portText { portText = d }
+                        }
                 }
             }
+            if let msg = hostError ?? portError { Text(msg).font(.caption).foregroundStyle(.red) }
             field(L("用户（选填）", "User (optional)")) {
                 TextField(L("默认：本地用户", "default: local user"), text: $user).frame(width: 180)
             }
